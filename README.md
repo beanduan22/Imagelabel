@@ -42,26 +42,26 @@ install, no setup).
 
 ## What You Will See and Judge
 
-For each case, the interface shows:
+For each case, the interface shows two images side by side:
 
-- the **source image** and its **source label** (for ImageNet cases, the
-  label comes with synonyms and a short dictionary definition to help you);
+- the **source image**;
 - the **generated image** derived from it.
 
 Your task for every case:
 
-> Does the generated image still clearly depict the source label's class?
+> Does the generated image still depict the same class of object as the
+> source image?
 
-- Choose **Preserved** if the generated image still shows an object of the
-  same class as the source label.
-- Choose **Not preserved** if it no longer does (the object is unrecognizable,
-  or it now looks like a different class).
+- Choose **Yes, preserved** if the generated image still shows an object of
+  the same class as the source image.
+- Choose **No, not preserved** if it no longer does (the object is
+  unrecognizable, or it now looks like a different class).
 
 Trust your own perception — there is no "trick"; just answer what you see.
 
 ## Interface Tips
 
-- **Keyboard shortcuts:** `1` = Preserved, `2` = Not preserved,
+- **Keyboard shortcuts:** `1` = Yes (preserved), `2` = No (not preserved),
   `←` / `→` = previous / next case.
 - Every answer is **saved instantly** to `annotations/<yourID>.jsonl`.
   You can close the browser or stop the server at any time and resume later —

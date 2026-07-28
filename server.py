@@ -9,7 +9,8 @@ Adjudication phase (third annotator sees only the disagreements):
     python server.py --study ./study --port 8765 --adjudicate alice bob
 
 Protocol enforced by the server:
-  - generation method / model / model prediction are never sent to the client;
+  - generation method / model / model prediction / ground-truth label info are
+    never sent to the client — annotators only see the two images;
   - case ids and image paths are opaque hex, so nothing leaks the combination;
   - case order is shuffled deterministically per annotator;
   - every judgment is appended immediately to annotations/<annotator>.jsonl
@@ -34,7 +35,7 @@ CASE_IDS: list[str] = []
 MODE = 'primary'  # or 'adjudicate'
 
 # Fields safe to expose to annotators (everything else stays server-side).
-PUBLIC_FIELDS = ('case_id', 'dataset', 'gt_label', 'gt_synonyms', 'gt_definition')
+PUBLIC_FIELDS = ('case_id',)
 
 
 def valid_annotator(name: str) -> bool:
@@ -234,13 +235,10 @@ PAGE = r"""<!doctype html>
     font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
     color: var(--muted); margin-top: 0.5rem;
   }
-  .labelbox {
-    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-    padding: 0.8rem 0.2rem; margin-bottom: 1.1rem; line-height: 1.5;
+  .question {
+    text-align: center; font-size: 1.02rem; margin-bottom: 0.9rem;
+    border-top: 1px solid var(--line); padding-top: 1rem;
   }
-  .labelbox .gt { font-size: 1.15rem; font-weight: 650; }
-  .labelbox .aux { color: var(--muted); font-size: 0.88rem; }
-  .question { text-align: center; font-size: 1.02rem; margin-bottom: 0.9rem; }
   .choices { display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
   button {
     font: inherit; cursor: pointer; border-radius: 8px; padding: 0.6rem 1.4rem;
@@ -283,44 +281,38 @@ PAGE = r"""<!doctype html>
   <div class="card" id="login">
     <h2>Annotator sign-in</h2>
     <p>Enter your assigned annotator ID. Your progress is saved after every
-       judgment — you can close the tab and return at any time.<br>
-       输入分配给你的标注员 ID。每次判断都会立刻保存,可随时中断继续。</p>
+       judgment — you can close the tab and return at any time.</p>
     <input id="name" placeholder="annotator ID, e.g. alice" autocomplete="off">
-    <button class="btn-yes" id="start">Start / 开始</button>
+    <button class="btn-yes" id="start">Start</button>
     <div class="err" id="loginerr"></div>
   </div>
 
   <div class="card hidden" id="task">
     <div class="images">
-      <figure><img id="img-src" alt="source image"><figcaption>Source · 原图</figcaption></figure>
-      <figure><img id="img-gen" alt="generated image"><figcaption>Generated · 生成图</figcaption></figure>
-    </div>
-    <div class="labelbox">
-      <div class="gt" id="gt"></div>
-      <div class="aux" id="syn"></div>
-      <div class="aux" id="def"></div>
+      <figure><img id="img-src" alt="source image"><figcaption>Source</figcaption></figure>
+      <figure><img id="img-gen" alt="generated image"><figcaption>Generated</figcaption></figure>
     </div>
     <div class="question">
-      Does the <strong>generated</strong> image still depict the source label above?<br>
-      <span style="color:var(--muted);font-size:0.9rem">生成图是否仍然表现上述源标签的内容?</span>
+      Does the <strong>generated</strong> image still depict the same class of object
+      as the <strong>source</strong> image?
     </div>
     <div class="choices">
-      <button class="btn-yes" id="yes">Yes, label preserved · 保留<kbd>1</kbd></button>
-      <button class="btn-no" id="no">No, not preserved · 未保留<kbd>2</kbd></button>
+      <button class="btn-yes" id="yes">Yes, preserved<kbd>1</kbd></button>
+      <button class="btn-no" id="no">No, not preserved<kbd>2</kbd></button>
     </div>
-    <textarea id="comment" placeholder="Optional comment · 备注(可选)"></textarea>
+    <textarea id="comment" placeholder="Optional comment"></textarea>
     <div class="nav">
-      <button id="prev">&larr; Previous · 上一题</button>
-      <button id="jump">Next unlabeled · 跳到未标注 &raquo;</button>
-      <button id="next">Next · 下一题 &rarr;</button>
+      <button id="prev">&larr; Previous</button>
+      <button id="jump">Next unlabeled &raquo;</button>
+      <button id="next">Next &rarr;</button>
     </div>
     <div class="hint">Keyboard: <b>1</b> preserved · <b>2</b> not preserved · <b>&larr;/&rarr;</b> navigate</div>
   </div>
 
   <div class="card hidden" id="done">
-    <h2>All cases labeled — thank you! · 全部完成,感谢!</h2>
-    <p class="hint">You may still go back and revise any judgment.<br>仍可返回修改任意判断。</p>
-    <div class="choices"><button id="review">Review from start · 从头检查</button></div>
+    <h2>All cases labeled — thank you!</h2>
+    <p class="hint">You may still go back and revise any judgment.</p>
+    <div class="choices"><button id="review">Review from start</button></div>
   </div>
 </main>
 <script>
@@ -374,11 +366,6 @@ function render() {
   const c = S.cases[S.idx];
   $('img-src').src = '/img/' + c.case_id + '/a';
   $('img-gen').src = '/img/' + c.case_id + '/b';
-  $('gt').textContent = 'Source label · 源标签: ' + c.gt_label +
-      (c.dataset ? '   (' + c.dataset + ')' : '');
-  $('syn').textContent = (c.gt_synonyms && c.gt_synonyms.length)
-      ? 'Also called · 同义词: ' + c.gt_synonyms.join(', ') : '';
-  $('def').textContent = c.gt_definition ? 'Definition · 释义: ' + c.gt_definition : '';
   const rec = S.labels[c.case_id];
   $('yes').classList.toggle('picked', !!rec && rec.label === 'preserved');
   $('no').classList.toggle('picked', !!rec && rec.label === 'not_preserved');
