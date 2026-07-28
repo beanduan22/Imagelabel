@@ -1,99 +1,100 @@
-# Human Semantic Validation — 标注工具
+# Image Annotation Study
 
-按论文协议实现:每个 model–method 组合抽 30 个 prediction-change cases(共 540),
-两名主标注员独立盲评,分歧由第三人仲裁;界面隐藏生成方法与模型预测;
-ImageNet 额外显示 synset 名称、同义词、释义。
+Thank you for helping with this study! You will look at pairs of images and
+judge whether a generated image still shows the **same class** as the original
+source image.
 
-纯 Python 标准库(仅导出脚本需要 torch),无需安装任何依赖。
+Everything you need is already in this repository — all study images are
+included, and the tool runs with **plain Python 3 only** (no packages to
+install, no setup).
 
-## 1. 准备数据(生成 cases.jsonl)
+## Quick Start
 
-对每个 (model, method) 组合运行一次,追加写入同一个 study 目录:
+1. **Clone this repository** (or download it as a ZIP and unpack it):
 
-```bash
-python make_manifest.py \
-  --failures ../Latte/results/mnist_lenet5_single/failures_single.pt \
-  --dataset MNIST --model lenet5 --method latte \
-  --num 30 --seed 0 --out ./study
+   ```bash
+   git clone https://github.com/beanduan22/Imagelabel.git
+   cd Imagelabel
+   ```
 
-python make_manifest.py \
-  --failures ../Latte/results/cifar10_vgg16_single/failures_single.pt \
-  --dataset CIFAR10 --model vgg16 --method latte \
-  --num 30 --seed 0 --out ./study
+2. **Warm up first** with 9 practice items (these are *not* counted in the
+   study — use them to get familiar with the interface):
 
-# ImageNet 必须提供类别信息(synset 名称/同义词/释义):
-python make_manifest.py \
-  --failures ../Latte/results/imagenet_vgg19_single/failures_single.pt \
-  --dataset ImageNet --model vgg19 --method latte \
-  --num 30 --seed 0 --out ./study \
-  --class-info imagenet_class_info.json
-```
+   ```bash
+   python server.py --study ./demo --port 8765
+   ```
 
-`--class-info` JSON 格式(可用 NLTK WordNet 生成):
+   Open <http://localhost:8765> in your browser and enter your annotator ID
+   (the ID given to you by the organizer, e.g. `alice`). Click through the
+   practice items, then stop the server with `Ctrl+C`.
 
-```json
-{"0": {"label": "tench", "synonyms": ["Tinca tinca"], "definition": "freshwater dace-like game fish ..."}}
-```
+3. **Start the real session**:
 
-**基线方法**的结果如果不是 LATTE 的 `.pt` 格式,自己写导出脚本即可,只要往
-`study/cases.jsonl` 追加同样字段的行、把图片放进 `study/images/`:
+   ```bash
+   python server.py --study ./study --port 8765
+   ```
 
-```json
-{"case_id": "随机hex", "dataset": "...", "model": "...", "method": "...",
- "source_image": "images/xxx_a.png", "generated_image": "images/xxx_b.png",
- "gt_class_index": 0, "gt_label": "...", "gt_synonyms": [], "gt_definition": "",
- "pred_class_index": 3}
-```
+   Open <http://localhost:8765> again and log in with the **same ID**.
+   Work through all cases.
 
-注意 `case_id` 和图片文件名必须是随机的(不能包含 method/model),否则会破坏盲评。
+4. **When you are finished**, send the file `annotations/<yourID>.jsonl`
+   back to the organizer.
 
-## 2. 主标注阶段(两名标注员)
+## What You Will See and Judge
 
-```bash
-python server.py --study ./study --port 8765
-```
+For each case, the interface shows:
 
-标注员浏览器打开 `http://<你的IP>:8765`,输入各自的 ID(如 `alice` / `bob`)。
+- the **source image** and its **source label** (for ImageNet cases, the
+  label comes with synonyms and a short dictionary definition to help you);
+- the **generated image** derived from it.
 
-- 每人看到的题目顺序按其 ID 确定性打乱(不同人顺序不同,同一人每次一致);
-- 界面只显示原图/生成图 + 源标签信息,**不显示** method、model、模型预测;
-- 每次点击立刻写入 `annotations/<ID>.jsonl`,可随时关页面、随时续标;
-- 快捷键:`1` 保留 / `2` 未保留 / `←` `→` 翻页;同一题重标以最后一次为准。
+Your task for every case:
 
-先用 `--study ./demo` 给标注员练手(9 个示例题,不计入正式数据)。
+> Does the generated image still clearly depict the source label's class?
 
-## 3. 仲裁阶段(第三名标注员)
+- Choose **Preserved** if the generated image still shows an object of the
+  same class as the source label.
+- Choose **Not preserved** if it no longer does (the object is unrecognizable,
+  or it now looks like a different class).
 
-两名主标注员**全部标完后**:
+Trust your own perception — there is no "trick"; just answer what you see.
 
-```bash
-python server.py --study ./study --port 8765 --adjudicate alice bob
-```
+## Interface Tips
 
-仲裁人(如 `carol`)登录后只会看到两人有分歧的题目,同样盲评(看不到两人的标签)。
+- **Keyboard shortcuts:** `1` = Preserved, `2` = Not preserved,
+  `←` / `→` = previous / next case.
+- Every answer is **saved instantly** to `annotations/<yourID>.jsonl`.
+  You can close the browser or stop the server at any time and resume later —
+  your progress is kept.
+- If you change your mind, just re-answer a case; the **last answer counts**.
+- Please work **independently**: do not discuss cases or answers with other
+  annotators while the study is running.
 
-## 4. 统计
+## For Study Organizers
 
-```bash
-python analyze.py --study ./study --a1 alice --a2 bob --adj carol
-```
+- Each annotator sees the cases in an order deterministically shuffled by
+  their ID (different order per annotator, stable across sessions).
+- After both primary annotators finish, run the adjudication mode for the
+  third annotator, who only sees the cases where the two disagree (without
+  seeing their answers):
 
-输出每个 dataset/model/method 组合与总体的:
+  ```bash
+  python server.py --study ./study --port 8765 --adjudicate alice bob
+  ```
 
-- 判定为保留源标签的数量与比例;
-- 95% Wilson 置信区间;
-- Verified DoF(保留案例中不同的 `pred_class_index` 数量);
-- Cohen's κ(两名主标注员仲裁前的一致性);
+- Compute the final statistics (proportions with 95% Wilson CIs, Cohen's κ,
+  per-combination breakdown) and write `study/validation_summary.csv`:
 
-并写出 `study/validation_summary.csv`。
+  ```bash
+  python analyze.py --study ./study --a1 alice --a2 bob --adj carol
+  ```
 
-## 文件说明
+## Files
 
-| 文件 | 作用 |
+| Path | Purpose |
 |---|---|
-| `make_manifest.py` | 从 LATTE `failures_*.pt` 抽样导出案例(需 torch) |
-| `server.py` | 标注 GUI 服务(标准库,主标注 + 仲裁两种模式) |
-| `analyze.py` | Wilson CI / κ / Verified DoF 统计(标准库) |
-| `study/cases.jsonl` | 案例清单(含 method/model,**不要发给标注员**) |
-| `annotations/*.jsonl` | 每个标注员的判定记录(追加式,含时间戳) |
-| `demo/` | 9 个示例题,供练手与检查界面 |
+| `server.py` | Annotation GUI server (standard library only) |
+| `study/` | The study cases and images |
+| `demo/` | 9 practice items (not part of the study) |
+| `annotations/` | One `.jsonl` file per annotator, written automatically |
+| `analyze.py` | Statistics script (organizer use) |
